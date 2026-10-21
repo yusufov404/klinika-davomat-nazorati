@@ -1,5 +1,10 @@
 ﻿# Klinika Xodimlari Davomat Nazorati Tizimi
 
+[![CI](https://github.com/yusufov404/klinika-davomat-nazorati/actions/workflows/ci.yml/badge.svg)](https://github.com/yusufov404/klinika-davomat-nazorati/actions/workflows/ci.yml)
+[![Node](https://img.shields.io/badge/node-20%2B-green.svg)](https://nodejs.org)
+[![PostgreSQL](https://img.shields.io/badge/postgres-16-blue.svg)](https://www.postgresql.org)
+[![License](https://img.shields.io/badge/license-proprietary-grey.svg)]()
+
 Hikvision Face ID terminallarini markaziy bazaga ulab, davomatni avtomatik
 hisoblaydigan lokal (LAN) tizim.
 
