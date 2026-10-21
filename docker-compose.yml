@@ -1,0 +1,128 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: attendance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-attendance}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-attendance}
+      POSTGRES_DB: ${DB_NAME:-attendance}
+      TZ: ${TZ:-Asia/Tashkent}
+      PGTZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Postgres porti tashqariga ochilmaydi (faqat ichki tarmoq)
+    expose:
+      - "5432"
+    networks:
+      - attendance
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-attendance} -d ${DB_NAME:-attendance}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    build:
+      context: ./server
+    container_name: attendance-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Asia/Tashkent}
+      PORT: 3000
+      DATABASE_URL: postgres://${DB_USER:-attendance}:${DB_PASSWORD:-attendance}@db:5432/${DB_NAME:-attendance}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-attendance}
+      DB_PASSWORD: ${DB_PASSWORD:-attendance}
+      DB_NAME: ${DB_NAME:-attendance}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      TERMINAL_EVENT_TOKEN: ${TERMINAL_EVENT_TOKEN}
+      TERMINAL_IP_ALLOWLIST: ${TERMINAL_IP_ALLOWLIST:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://192.168.50.2:3000}
+      JOBS_ENABLED: "true"
+      BACKUP_ENABLED: "true"
+      BACKUP_DIR: /app/backups
+    volumes:
+      - backups:/app/backups
+    # Terminallar push event yuborishi uchun 3000-port LAN'da ochiq
+    ports:
+      - "3000:3000"
+    networks:
+      - attendance
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build:
+      context: ./web
+      args:
+        NGINX_CONF: nginx-http.conf
+    container_name: attendance-web
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
+    networks:
+      - attendance
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------
+  #  PostgreSQL backup (har kuni 03:00, 14 kunlik rotatsiya)
+  # ---------------------------------------------------------
+  backup:
+    image: postgres:16-alpine
+    container_name: attendance-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-attendance}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - backups:/backups
+      - ./scripts:/scripts:ro
+    entrypoint: >
+      sh -c "while true; do
+        now=$$(date +%Y%m%d_%H%M%S);
+        echo \"[$$(date)] Backup boshlandi: $${now}\";
+        pg_dump -h db -U ${DB_USER:-attendance} -d ${DB_NAME:-attendance} -F c -f /backups/attendance_$${now}.dump &&
+          echo '[OK] Backup yaratildi' || echo '[XATO] Backup yaratilmadi';
+        find /backups -name 'attendance_*.dump' -mtime +${BACKUP_RETENTION_DAYS:-14} -delete;
+        sleep 86400;
+      done"
+    networks:
+      - attendance
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  pgdata:
+  backups:
+
+networks:
+  attendance:
+    driver: bridge

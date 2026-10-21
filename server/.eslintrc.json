@@ -1,0 +1,33 @@
+{
+  "root": true,
+  "env": {
+    "node": true,
+    "es2023": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2023,
+    "sourceType": "script"
+  },
+  "extends": "eslint:recommended",
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console": "off",
+    "eqeqeq": ["error", "smart"],
+    "no-var": "error",
+    "prefer-const": "warn",
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-return-await": "warn",
+    "no-throw-literal": "error",
+    "no-promise-executor-return": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.js"],
+      "env": { "node": true }
+    },
+    {
+      "files": ["scripts/**/*.js", "sequelize-cli.js"],
+      "rules": { "no-console": "off" }
+    }
+  ]
+}

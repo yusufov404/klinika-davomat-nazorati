@@ -1,0 +1,32 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+coverage/
+dist/
+.DS_Store
+Thumbs.db
+certs/
+server/uploads/
+!server/uploads/.gitkeep
+server/.pgdata/
+.idea/
+.vscode/
+*.sqlite
+
+# Test natijalari
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Backup va eksportlar
+backups/
+*.sql.gz
+*.dump
+
+# OS
+.DS_Store
+

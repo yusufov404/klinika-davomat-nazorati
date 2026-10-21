@@ -1,0 +1,238 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  body {
+    @apply bg-slate-100 text-slate-800 antialiased;
+  }
+  [x-cloak] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-slate-200;
+  }
+  .card-header {
+    @apply px-5 py-3 border-b border-slate-200 flex items-center justify-between;
+  }
+  .card-title {
+    @apply font-semibold text-slate-800;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition
+           disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap;
+  }
+  .btn-primary {
+    @apply btn bg-blue-600 text-white hover:bg-blue-700 focus:ring-4 focus:ring-blue-200;
+  }
+  .btn-secondary {
+    @apply btn bg-slate-200 text-slate-700 hover:bg-slate-300;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700;
+  }
+  .btn-success {
+    @apply btn bg-emerald-600 text-white hover:bg-emerald-700;
+  }
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+  .input {
+    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500
+           focus:ring-2 focus:ring-blue-100 outline-none bg-white;
+  }
+  .label {
+    @apply block text-xs font-medium text-slate-600 mb-1;
+  }
+  .table-wrap {
+    @apply overflow-x-auto;
+  }
+  .table {
+    @apply w-full text-sm text-left border-collapse;
+  }
+  .table thead th {
+    @apply bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wide
+           px-4 py-3 border-b border-slate-200 whitespace-nowrap;
+  }
+  .table tbody td {
+    @apply px-4 py-2.5 border-b border-slate-100;
+  }
+  .table tbody tr:hover {
+    @apply bg-slate-50;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-present { @apply bg-emerald-100 text-emerald-700; }
+  .badge-late { @apply bg-amber-100 text-amber-700; }
+  .badge-absent { @apply bg-red-100 text-red-700; }
+  .badge-leave { @apply bg-blue-100 text-blue-700; }
+  .badge-holiday { @apply bg-violet-100 text-violet-700; }
+  .badge-day_off { @apply bg-slate-200 text-slate-600; }
+  .badge-incomplete { @apply bg-fuchsia-100 text-fuchsia-700; }
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300
+           hover:bg-slate-700 hover:text-white transition cursor-pointer;
+  }
+  .nav-link.active {
+    @apply bg-blue-600 text-white shadow-lg;
+  }
+  .stat-card {
+    @apply card p-4;
+  }
+  .modal-backdrop {
+    @apply fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 flex items-center justify-center p-4;
+  }
+  .modal {
+    @apply bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col z-50;
+  }
+  .spinner {
+    @apply inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin;
+  }
+  .skeleton {
+    @apply bg-slate-200 rounded animate-pulse;
+  }
+}
+
+/* =====================================================================
+ *  DARK MODE — asosiy yuzalar uchun (CSS o'zgaruvchilari orqali)
+ * ===================================================================== */
+[data-theme='dark'] body {
+  @apply bg-slate-900 text-slate-200;
+}
+
+[data-theme='dark'] .card {
+  @apply bg-slate-800 border-slate-700;
+}
+
+[data-theme='dark'] .card-header {
+  @apply border-slate-700;
+}
+
+[data-theme='dark'] .card-title {
+  @apply text-slate-100;
+}
+
+[data-theme='dark'] .table thead th {
+  @apply bg-slate-900 text-slate-300 border-slate-700;
+}
+
+[data-theme='dark'] .table tbody td {
+  @apply border-slate-700;
+}
+
+[data-theme='dark'] .table tbody tr:hover {
+  @apply bg-slate-700/40;
+}
+
+[data-theme='dark'] .input,
+[data-theme='dark'] select,
+[data-theme='dark'] textarea {
+  @apply bg-slate-800 border-slate-600 text-slate-100;
+}
+
+[data-theme='dark'] .input:disabled {
+  @apply bg-slate-900 text-slate-400;
+}
+
+[data-theme='dark'] .btn-secondary {
+  @apply bg-slate-700 text-slate-100 hover:bg-slate-600;
+}
+
+[data-theme='dark'] .nav-link {
+  @apply text-slate-400 hover:bg-slate-700 hover:text-white;
+}
+
+[data-theme='dark'] .nav-link.active {
+  @apply bg-blue-600 text-white;
+}
+
+[data-theme='dark'] aside {
+  @apply bg-slate-900 border-r border-slate-800;
+}
+
+[data-theme='dark'] header {
+  @apply bg-slate-800 border-slate-700;
+}
+
+[data-theme='dark'] .stat-card {
+  @apply bg-slate-800 border border-slate-700;
+}
+
+[data-theme='dark'] .skeleton {
+  @apply bg-slate-700;
+}
+
+[data-theme='dark'] .modal {
+  @apply bg-slate-800 text-slate-100;
+}
+
+[data-theme='dark'] .modal-backdrop {
+  @apply bg-slate-950/70;
+}
+
+[data-theme='dark'] .border-slate-100,
+[data-theme='dark'] .border-slate-200 {
+  @apply border-slate-700;
+}
+
+/* ---------------- Chop etish (print) ---------------- */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body {
+    @apply bg-white text-black;
+  }
+
+  aside,
+  header,
+  .toast,
+  .no-print,
+  button,
+  .modal-backdrop {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  .card {
+    @apply border border-slate-300 shadow-none break-inside-avoid;
+  }
+
+  .table {
+    font-size: 10px;
+  }
+
+  .table thead th {
+    @apply bg-slate-200 text-black;
+  }
+
+  .table tbody tr {
+    break-inside: avoid;
+  }
+
+  .stat-card {
+    @apply border border-slate-300;
+  }
+
+  /* Sahifa boshida sarlavha */
+  .print-header {
+    display: block !important;
+    margin-bottom: 8px;
+  }
+}
+
+.print-header {
+  display: none;
+}

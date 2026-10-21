@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Klinika Davomat Nazorati</title>
+  <link rel="stylesheet" href="/css/app.css?v=1.1.1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕐</text></svg>">
+  <script defer src="/js/app.js?v=1.1.1"></script>
+  <script defer src="/vendor/alpine.min.js?v=3.17.5"></script>
+  <script defer src="/vendor/chart.umd.js?v=4.4.0"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js?v=2').catch(function () {});
+      });
+    }
+  </script>
+</head>
+<body x-data="app" x-init="init()"
+      @keydown.window.ctrl.k.prevent="paletteOpen = !paletteOpen; paletteQuery = ''"
+      @keydown.window.meta.k.prevent="paletteOpen = !paletteOpen; paletteQuery = ''"
+      @keydown.window.escape="paletteOpen = false; showProfileMenu = false; showNotifications = false">
+
+  <!-- ================= LOGIN ================= -->
+  <div x-show="!isAuth" class="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+    <div class="w-full max-w-sm">
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 text-white text-2xl font-bold mb-4">🕐</div>
+        <h1 class="text-2xl font-bold text-white">Davomat Nazorati</h1>
+        <p class="text-slate-400 text-sm mt-1">Klinika xodimlari davomat tizimi</p>
+      </div>
+
+      <form @submit.prevent="login()" class="card p-6 space-y-4">
+        <div>
+          <label class="label">Login</label>
+          <input type="text" x-model="loginForm.username" class="input" autocomplete="username" required autofocus>
+        </div>
+        <div>
+          <label class="label">Parol</label>
+          <input type="password" x-model="loginForm.password" class="input" autocomplete="current-password" required>
+        </div>
+
+        <div x-show="loginError" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2" x-text="loginError"></div>
+
+        <button type="submit" class="btn-primary w-full justify-center" :disabled="loading">
+          <span x-show="loading" class="spinner"></span>
+          Kirish
+        </button>
+
+        <div class="text-xs text-slate-400 border-t border-slate-100 pt-3 space-y-1">
+          <p class="font-medium text-slate-500">Demo hisoblar:</p>
+          <p>admin / Admin@12345 — to'liq huquq</p>
+          <p>adminka / Adminka@12345 — administrator</p>
+          <p>glavniy_vrach / Vrach@12345 — glavniy vrach</p>
+        </div>
+      </form>
+
+      <p class="text-center text-slate-500 text-xs mt-6">
+        Tizim klinika ichki tarmog'ida ishlaydi. Barcha kirishlar audit logga yoziladi.
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= ASOSIY ================= -->
+  <div x-show="isAuth" class="flex min-h-screen" x-cloak>
+
+    <!-- Yon panel -->
+    <aside class="hidden lg:flex flex-col w-64 bg-slate-800 flex-shrink-0">
+      <div class="px-5 py-5 border-b border-slate-700 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">🕐</div>
+        <div>
+          <div class="text-white font-semibold text-sm leading-tight">Davomat Nazorati</div>
+          <div class="text-slate-400 text-xs">Klinika tizimi</div>
+        </div>
+      </div>
+
+      <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+        <template x-for="item in visibleNav" :key="item.id">
+          <a class="nav-link" :class="page === item.id && 'active'" @click="go(item.id)">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" x-html="`<path stroke-linecap='round' stroke-linejoin='round' d='${item.icon}'/>`"></svg>
+            <span x-text="t(item.id)"></span>
+          </a>
+        </template>
+      </nav>
+
+      <div class="p-3 border-t border-slate-700">
+        <button class="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-700 text-left" @click="showProfileMenu = !showProfileMenu">
+          <div class="w-8 h-8 rounded-full bg-slate-600 text-white flex items-center justify-center text-sm font-medium flex-shrink-0"
+               x-text="(user?.fullName || '?').charAt(0)"></div>
+          <div class="flex-1 min-w-0">
+            <div class="text-white text-sm truncate" x-text="user?.fullName"></div>
+            <div class="text-slate-400 text-xs truncate" x-text="user ? (ROLE_LABELS[user.role] || user.role) : ''"></div>
+          </div>
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+
+        <!-- Profil menyusi -->
+        <div x-show="showProfileMenu" x-cloak @click.outside="showProfileMenu = false"
+             class="mt-2 bg-slate-700 rounded-lg overflow-hidden shadow-xl">
+          <button class="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-600" @click="openProfile(); showProfileMenu = false">Profilni tahrirlash</button>
+          <button class="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-600" @click="showPasswordModal = true; showProfileMenu = false; loadSessions()">Parolni o'zgartirish</button>
+          <button class="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-600" @click="loadSessions(); showProfileMenu = false">Faol sessiyalar</button>
+          <div class="border-t border-slate-600"></div>
+          <button class="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-slate-600" @click="logout()">Chiqish</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobil menyu -->
+    <div x-show="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-slate-900/50 z-30 lg:hidden"></div>
+    <div x-show="sidebarOpen" x-cloak class="fixed inset-y-0 left-0 w-64 bg-slate-800 z-40 lg:hidden flex flex-col">
+      <div class="px-5 py-5 border-b border-slate-700 flex items-center justify-between">
+        <div class="text-white font-semibold">Davomat Nazorati</div>
+        <button class="text-slate-400" @click="sidebarOpen = false">✕</button>
+      </div>
+      <nav class="flex-1 p-3 space-y-1">
+        <template x-for="item in visibleNav" :key="item.id">
+          <a class="nav-link" :class="page === item.id && 'active'" @click="go(item.id)" x-text="t(item.id)"></a>
+        </template>
+      </nav>
+    </div>
+
+    <!-- Kontent -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <header class="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+          <button class="lg:hidden text-slate-600" @click="sidebarOpen = true">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <h1 class="font-semibold text-slate-800" x-text="navTitle"></h1>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-4">
+          <span class="hidden sm:block text-sm text-slate-500" x-text="new Date().toLocaleDateString('uz-UZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })"></span>
+
+          <!-- Command palette -->
+          <button class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-400 hover:border-slate-300 hover:text-slate-500"
+                  @click="paletteOpen = true">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <span>Qidirish</span>
+            <kbd class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">Ctrl K</kbd>
+          </button>
+
+          <!-- Til -->
+          <select class="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600" x-model="lang" @change="setLang(lang)">
+            <option value="uz">O'zbekcha</option>
+            <option value="ru">Русский</option>
+          </select>
+
+          <!-- Dark mode -->
+          <button class="p-2 text-slate-500 hover:text-slate-700" @click="toggleTheme()" :title="theme === 'dark' ? 'Yorug\' rejim' : 'Qorong\'i rejim'">
+            <svg x-show="theme !== 'dark'" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9 0 009 9c.322 0 .636.061.927.22a2 2 0 011.428 2.122 8.25 8.25 0 009.073-9.073z"/></svg>
+            <svg x-show="theme === 'dark'" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          </button>
+
+          <!-- Bildirishnomalar -->
+          <div class="relative">
+            <button class="relative p-2 text-slate-500 hover:text-slate-700" @click="toggleNotifications()">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              <span x-show="unreadCount > 0" x-text="unreadCount"
+                    class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"></span>
+            </button>
+
+            <div x-show="showNotifications" x-cloak @click.outside="showNotifications = false"
+                 class="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 z-50">
+              <div class="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                <span class="font-semibold text-sm">Bildirishnomalar</span>
+                <button class="text-xs text-blue-600 hover:underline" @click="markAllRead()">Hammasini o'qilgan</button>
+              </div>
+              <div class="divide-y divide-slate-100">
+                <template x-for="n in notifications" :key="n.id">
+                  <div class="px-4 py-3 hover:bg-slate-50 cursor-pointer" @click="markNotificationRead(n)">
+                    <div class="flex items-start gap-2">
+                      <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0" :class="n.isRead ? 'bg-slate-200' : 'bg-blue-500'"></span>
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium" x-text="n.title"></div>
+                        <div class="text-xs text-slate-500 mt-0.5" x-text="n.body"></div>
+                        <div class="text-[10px] text-slate-400 mt-1" x-text="fmtAgo(n.createdAt)"></div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <div x-show="notifications.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">
+                  Bildirishnoma yo'q
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <span x-show="loading" class="spinner !border-slate-400 !border-t-transparent"></span>
+        </div>
+      </header>
+
+      <main class="flex-1 p-4 lg:p-6 space-y-5">
+
+        <!-- ============ DASHBOARD ============ -->
+        <section x-show="page === 'dashboard'" class="space-y-5">
+          <div class="flex justify-end">
+            <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+              <template x-for="d in [7, 30, 90]" :key="d">
+                <button class="px-3 py-1.5 text-xs font-medium rounded-md"
+                        :class="dashRange === d ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'"
+                        @click="dashRange = d; loadDashboard()" x-text="d + ' kun'"></button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Skeleton -->
+          <template x-if="loading && !dash.summary">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <template x-for="i in 4" :key="i">
+                <div class="card p-4"><div class="skeleton h-4 w-24"></div><div class="skeleton h-8 w-16 mt-3"></div></div>
+              </template>
+            </div>
+          </template>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="stat-card">
+              <div class="text-xs text-slate-500 font-medium">Ishda</div>
+              <div class="text-2xl font-bold text-emerald-600 mt-1" x-text="dash.summary?.present ?? '—'"></div>
+            </div>
+            <div class="stat-card">
+              <div class="text-xs text-slate-500 font-medium">Kechikdi</div>
+              <div class="text-2xl font-bold text-amber-600 mt-1" x-text="dash.summary?.late ?? '—'"></div>
+            </div>
+            <div class="stat-card">
+              <div class="text-xs text-slate-500 font-medium">Kelmagan</div>
+              <div class="text-2xl font-bold text-red-600 mt-1" x-text="dash.summary?.absent ?? '—'"></div>
+            </div>
+            <div class="stat-card">
+              <div class="text-xs text-slate-500 font-medium">Tuzatish kerak</div>
+              <div class="text-2xl font-bold text-fuchsia-600 mt-1" x-text="dash.summary?.incomplete ?? '—'"></div>
+            </div>
+          </div>
+
+          <!-- Chartlar -->
+          <div class="grid lg:grid-cols-3 gap-5">
+            <div class="card lg:col-span-2">
+              <div class="card-header">
+                <span class="card-title">Kunlik davomat dinamikasi</span>
+                <span class="text-xs text-slate-400" x-text="`${dashRange} kun`"></span>
+              </div>
+              <div class="p-4">
+                <div class="h-64"><canvas id="chartTrend"></canvas></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><span class="card-title">Taqsimot</span></div>
+              <div class="p-4">
+                <div class="h-64"><canvas id="chartDistribution"></canvas></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Bo'limlar kesimi</span></div>
+            <div class="p-4">
+              <div class="h-72"><canvas id="chartDepartments"></canvas></div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-5">
+            <!-- Terminallar holati -->
+            <div class="card lg:col-span-1">
+              <div class="card-header">
+                <span class="card-title">Terminallar holati</span>
+                <button class="btn-secondary btn-sm" @click="loadDashboard()">Yangilash</button>
+              </div>
+              <div class="p-3 space-y-2">
+                <template x-if="dash.terminals.length === 0">
+                  <p class="text-sm text-slate-400 p-3 text-center">Terminal qo'shilmagan</p>
+                </template>
+                <template x-for="t in dash.terminals" :key="t.id">
+                  <div class="flex items-center justify-between p-2.5 rounded-lg border border-slate-200">
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium truncate" x-text="t.name"></div>
+                      <div class="text-xs text-slate-400" x-text="`${t.ipAddress}:${t.port} · ${t.direction}`"></div>
+                    </div>
+                    <span class="badge" :class="t.status === 'active' ? 'badge-present' : 'badge-absent'"
+                          x-text="t.status === 'active' ? 'Online' : 'Offline'"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Oxirgi loglar -->
+            <div class="card lg:col-span-2">
+              <div class="card-header">
+                <span class="card-title">Oxirgi davomat loglari</span>
+                <button class="btn-secondary btn-sm" @click="go('attendance')">Barchasi</button>
+              </div>
+              <div class="table-wrap max-h-80 overflow-y-auto">
+                <table class="table">
+                  <thead>
+                    <tr><th>Vaqt</th><th>Xodim</th><th>Terminal</th><th>Usul</th><th>Manba</th></tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="l in dash.logs" :key="l.id">
+                      <tr>
+                        <td class="whitespace-nowrap" x-text="fmtDateTime(l.logTime)"></td>
+                        <td class="font-medium" x-text="l.Employee?.fullName || '—'"></td>
+                        <td x-text="l.Terminal?.name || '—'"></td>
+                        <td x-text="l.verifyMode || '—'"></td>
+                        <td>
+                          <span class="badge" :class="l.source === 'push' ? 'badge-present' : 'badge-late'" x-text="l.source"></span>
+                        </td>
+                      </tr>
+                    </template>
+                    <tr x-show="dash.logs.length === 0">
+                      <td colspan="5" class="text-center text-slate-400 py-8">Loglar yo'q</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ XODIMLAR ============ -->
+        <section x-show="page === 'employees'" class="space-y-4">
+          <div class="card p-4 flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[200px]">
+              <label class="label">Qidiruv</label>
+              <input type="text" x-model="employeeSearch" @keyup.enter="employeePage = 1; loadEmployees()"
+                     class="input" placeholder="Ism, tabel raqami yoki telefon">
+            </div>
+            <button class="btn-secondary" @click="employeePage = 1; loadEmployees()">Qidirish</button>
+            <button class="btn-secondary" @click="downloadEmployeeTemplate()" x-show="can('employees:write')">Excel shablon</button>
+            <label class="btn-secondary cursor-pointer" x-show="can('employees:write')">
+              Excel import
+              <input type="file" accept=".xlsx,.xlsm" class="hidden" @change="importEmployees($event.target.files[0]); $event.target.value = ''">
+            </label>
+            <button class="btn-primary" @click="openEmployeeModal()" x-show="can('employees:write')">+ Xodim qo'shish</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th class="w-10">#</th>
+                    <th class="cursor-pointer select-none" @click="toggleSort('employees', 'fullName')">
+                      Ism <span class="text-slate-400" x-text="sortIcon('employees', 'fullName')"></span></th>
+                    <th class="cursor-pointer select-none" @click="toggleSort('employees', 'employeeNo')">
+                      Tabel № <span class="text-slate-400" x-text="sortIcon('employees', 'employeeNo')"></span></th>
+                    <th class="cursor-pointer select-none" @click="toggleSort('employees', 'department')">
+                      Bo'lim <span class="text-slate-400" x-text="sortIcon('employees', 'department')"></span></th>
+                    <th class="cursor-pointer select-none" @click="toggleSort('employees', 'position')">
+                      Lavozim <span class="text-slate-400" x-text="sortIcon('employees', 'position')"></span></th>
+                    <th>Terminal ID</th>
+                    <th>Yuz</th>
+                    <th>Holat</th>
+                    <th class="text-right">Amallar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(e, i) in employees" :key="e.id">
+                    <tr>
+                      <td class="text-slate-400" x-text="(employeePage - 1) * 50 + i + 1"></td>
+                      <td class="font-medium" x-text="e.fullName"></td>
+                      <td x-text="e.employeeNo"></td>
+                      <td x-text="e.Department?.name || '—'"></td>
+                      <td x-text="e.Position?.name || '—'"></td>
+                      <td class="text-slate-500" x-text="e.terminalUserId || '—'"></td>
+                      <td>
+                        <span class="badge" :class="e.faceEnrolled ? 'badge-present' : 'badge-day_off'"
+                              x-text="e.faceEnrolled ? 'Kiritilgan' : 'Yo\'q'"></span>
+                      </td>
+                      <td>
+                        <span class="badge" :class="e.isActive ? 'badge-present' : 'badge-absent'"
+                              x-text="e.isActive ? 'Faol' : 'Ishdan ketgan'"></span>
+                      </td>
+                      <td class="text-right whitespace-nowrap">
+                        <button class="btn-secondary btn-sm" @click="syncEmployee(e)" title="Terminallarga yuborish" x-show="can('terminals:sync')">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.6M20 20v-5h-.6M4.6 9A8 8 0 0118.4 5.6M19.4 15A8 8 0 015.6 18.4"/></svg>
+                        </button>
+                        <label class="btn-secondary btn-sm cursor-pointer" title="Yuz rasmini yuborish" x-show="can('terminals:sync')">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                          <input type="file" accept="image/*" class="hidden" @change="uploadFace(e, $event.target.files[0])">
+                        </label>
+                        <button class="btn-secondary btn-sm" @click="openEmployeeModal(e)" x-show="can('employees:write')">Tahrir</button>
+                        <button class="btn-danger btn-sm" @click="deleteEmployee(e)" x-show="can('employees:write')">O'chirish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="employees.length === 0">
+                    <td colspan="9" class="text-center text-slate-400 py-10">
+                      <div x-show="!loading">Xodimlar topilmadi</div>
+                      <div x-show="loading" class="skeleton h-6 w-48 mx-auto"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="px-4 py-3 border-t border-slate-200 flex items-center justify-between text-sm text-slate-500" x-show="employeesMeta.total">
+              <span x-text="`Jami: ${employeesMeta.total} xodim`"></span>
+              <div class="flex gap-2">
+                <button class="btn-secondary btn-sm" @click="employeePage--; loadEmployees()" :disabled="employeePage <= 1">Oldingi</button>
+                <span class="px-2 py-1" x-text="`${employeePage} / ${employeesMeta.totalPages || 1}`"></span>
+                <button class="btn-secondary btn-sm" @click="employeePage++; loadEmployees()" :disabled="employeePage >= (employeesMeta.totalPages || 1)">Keyingi</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ TERMINALLAR ============ -->
+        <section x-show="page === 'terminals'" class="space-y-4">
+          <!-- Monitoring -->
+          <div class="card p-4" x-show="monitoring.summary">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div class="text-center">
+                <div class="text-2xl font-bold text-emerald-600" x-text="monitoring.summary?.online ?? 0"></div>
+                <div class="text-xs text-slate-500">Online</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-red-600" x-text="monitoring.summary?.offline ?? 0"></div>
+                <div class="text-xs text-slate-500">Offline</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-amber-600" x-text="monitoring.summary?.stale ?? 0"></div>
+                <div class="text-xs text-slate-500">Uzoqdan turibdi</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-slate-600" x-text="monitoring.summary?.logsToday ?? 0"></div>
+                <div class="text-xs text-slate-500">Bugungi log</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-blue-600" x-text="monitoring.summary?.pendingJobs ?? 0"></div>
+                <div class="text-xs text-slate-500">Navbatdagi sinxronlash</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-4 flex justify-end">
+            <button class="btn-primary" @click="openTerminalModal()" x-show="can('terminals:write')">+ Terminal qo'shish</button>
+          </div>
+
+          <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <template x-for="t in terminals" :key="t.id">
+              <div class="card p-4 space-y-3">
+                <div class="flex items-start justify-between">
+                  <div>
+                    <div class="font-semibold" x-text="t.name"></div>
+                    <div class="text-xs text-slate-500" x-text="`${t.ipAddress}:${t.port}`"></div>
+                  </div>
+                  <span class="badge" :class="t.status === 'active' ? 'badge-present' : 'badge-absent'"
+                        x-text="t.status === 'active' ? 'Online' : 'Offline'"></span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                  <div><span class="text-slate-400">Yo'nalish:</span> <span x-text="t.direction"></span></div>
+                  <div><span class="text-slate-400">Serial:</span> <span x-text="t.serialNumber || '—'"></span></div>
+                  <div><span class="text-slate-400">Oxirgi ko'rinish:</span> <span x-text="fmtAgo(t.lastSeenAt)"></span></div>
+                  <div><span class="text-slate-400">Sinxronizatsiya:</span> <span x-text="fmtAgo(t.lastSyncAt)"></span></div>
+                </div>
+
+                <div x-show="terminalTest[t.id]" class="text-xs rounded-lg p-2"
+                     :class="terminalTest[t.id]?.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"
+                     x-text="terminalTest[t.id]?.loading ? 'Tekshirilmoqda...' : terminalTest[t.id]?.detail"></div>
+
+                <div class="flex flex-wrap gap-2 pt-1 border-t border-slate-100">
+                  <button class="btn-secondary btn-sm" @click="testTerminal(t)" :disabled="terminalTest[t.id]?.loading">Test</button>
+                  <button class="btn-secondary btn-sm" @click="configureNotify(t)" x-show="can('terminals:write')">Push sozlash</button>
+                  <button class="btn-secondary btn-sm" @click="openTerminalModal(t)" x-show="can('terminals:write')">Tahrir</button>
+                  <button class="btn-danger btn-sm ml-auto" @click="deleteTerminal(t)" x-show="can('terminals:write')">O'chirish</button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <p x-show="terminals.length === 0" class="text-center text-slate-400 py-10">Hali terminal qo'shilmagan</p>
+        </section>
+
+        <!-- ============ ISH GRAFIGI ============ -->
+        <section x-show="page === 'schedule'" class="space-y-4">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Smenalar</span>
+              <button class="btn-primary btn-sm" @click="openShiftModal()" x-show="can('shifts:write')">+ Smena</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Nomi</th><th>Boshlanish</th><th>Tugash</th><th>Tungi</th><th>Kechikish</th><th>Erta ketish</th><th>Tanaffus</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="s in shifts" :key="s.id">
+                    <tr>
+                      <td class="font-medium" x-text="s.name"></td>
+                      <td x-text="s.startTime"></td>
+                      <td x-text="s.endTime"></td>
+                      <td x-text="s.crossesMidnight ? 'Ha' : 'Yo\'q'"></td>
+                      <td x-text="s.graceLateMinutes + ' daq'"></td>
+                      <td x-text="s.graceEarlyMinutes + ' daq'"></td>
+                      <td x-text="s.breakMinutes + ' daq'"></td>
+                      <td class="text-right whitespace-nowrap">
+                        <button class="btn-secondary btn-sm" @click="openShiftModal(s)" x-show="can('shifts:write')">Tahrir</button>
+                        <button class="btn-danger btn-sm" @click="deleteShift(s)" x-show="can('shifts:write')">O'chirish</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Xodimlar grafigi</span>
+              <div class="flex gap-2">
+                <button class="btn-secondary btn-sm" @click="openBulkModal()" x-show="can('schedules:write')">Ko'p xodimga bir vaqtda</button>
+                <button class="btn-primary btn-sm" @click="openScheduleModal()" x-show="can('schedules:write')">+ Grafik</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Smena</th><th>Kimdan</th><th>Kimgacha</th><th>Kunlar</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="s in schedules" :key="s.id">
+                    <tr>
+                      <td class="font-medium" x-text="s.Employee?.fullName || '—'"></td>
+                      <td x-text="s.Shift?.name || '—'"></td>
+                      <td x-text="s.validFrom"></td>
+                      <td x-text="s.validTo || 'Doimiy'"></td>
+                      <td>
+                        <template x-for="w in (s.weekdays || [])" :key="w">
+                          <span class="badge badge-day_off mr-1" x-text="weekdayName(w)"></span>
+                        </template>
+                      </td>
+                      <td class="text-right whitespace-nowrap">
+                        <button class="btn-secondary btn-sm" @click="openScheduleModal(s)" x-show="can('schedules:write')">Tahrir</button>
+                        <button class="btn-danger btn-sm" @click="deleteSchedule(s)" x-show="can('schedules:write')">O'chirish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="schedules.length === 0">
+                    <td colspan="6" class="text-center text-slate-400 py-6">Grafiklar yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ TABEL ============ -->
+        <section x-show="page === 'attendance'" class="space-y-4">
+          <div class="card p-4 grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+            <div>
+              <label class="label">Boshlanish</label>
+              <input type="date" x-model="attendanceFilters.dateFrom" class="input" @change="loadAttendance()">
+            </div>
+            <div>
+              <label class="label">Tugash</label>
+              <input type="date" x-model="attendanceFilters.dateTo" class="input" @change="loadAttendance()">
+            </div>
+            <div>
+              <label class="label">Xodim</label>
+              <select x-model="attendanceFilters.employeeId" class="input" @change="loadAttendance()">
+                <option value="">Barchasi</option>
+                <template x-for="e in employees" :key="e.id">
+                  <option :value="e.id" x-text="e.fullName"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="label">Bo'lim</label>
+              <select x-model="attendanceFilters.departmentId" class="input" @change="loadAttendance()">
+                <option value="">Barchasi</option>
+                <template x-for="d in departments" :key="d.id">
+                  <option :value="d.id" x-text="d.name"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="label">Holat</label>
+              <select x-model="attendanceFilters.status" class="input" @change="loadAttendance()">
+                <option value="">Barchasi</option>
+                <template x-for="(label, key) in STATUS_LABELS" :key="key">
+                  <option :value="key" x-text="label"></option>
+                </template>
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-secondary flex-1" @click="loadAttendance()">Filtr</button>
+              <button class="btn-primary flex-1" @click="recalculate()" x-show="can('attendance:write')">Qayta hisobla</button>
+            </div>
+          </div>
+
+          <!-- Excel integratsiyasi -->
+          <div class="card p-4 flex flex-wrap gap-3 items-center justify-between">
+            <div class="text-sm text-slate-600">
+              <span class="font-medium">Excel integratsiyasi:</span>
+              Tabel shablonini yuklab oling, Excel'da to'ldirib qayta import qiling.
+              <span class="text-xs text-slate-400">Kodlar: I=ishda, K=kechikdi, T=ta'til, B=bayram, D=dam kuni, X=kelmagan</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-secondary" @click="downloadTemplate()">Shablon yuklash</button>
+              <label class="btn-primary cursor-pointer" x-show="can('attendance:adjust')">
+                <span x-text="importing ? 'Yuklanmoqda...' : 'Excel import'"></span>
+                <input type="file" accept=".xlsx,.xlsm" class="hidden"
+                       @change="importExcel($event.target.files[0]); $event.target.value = ''">
+              </label>
+              <button class="btn-secondary" onclick="window.print()">🖨 Chop etish</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th class="cursor-pointer select-none" @click="toggleSort('attendance', 'date')">
+                      Sana <span class="text-slate-400" x-text="sortIcon('attendance', 'date')"></span></th>
+                    <th>Xodim</th>
+                    <th>Bo'lim</th>
+                    <th>Kelish</th>
+                    <th>Ketish</th>
+                    <th class="cursor-pointer select-none" @click="toggleSort('attendance', 'workedMinutes')">
+                      Ish vaqti <span class="text-slate-400" x-text="sortIcon('attendance', 'workedMinutes')"></span></th>
+                    <th class="cursor-pointer select-none" @click="toggleSort('attendance', 'lateMinutes')">
+                      Kechikish <span class="text-slate-400" x-text="sortIcon('attendance', 'lateMinutes')"></span></th>
+                    <th>Erta ketish</th>
+                    <th>Holat</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="a in attendance" :key="a.id">
+                    <tr>
+                      <td class="whitespace-nowrap" x-text="a.date"></td>
+                      <td class="font-medium" x-text="a.Employee?.fullName || '—'"></td>
+                      <td x-text="a.Employee?.Department?.name || '—'"></td>
+                      <td x-text="fmtTime(a.firstIn)"></td>
+                      <td x-text="fmtTime(a.lastOut)"></td>
+                      <td x-text="fmtHours(a.workedMinutes)"></td>
+                      <td class="text-amber-600" x-text="a.lateMinutes ? a.lateMinutes + ' daq' : '—'"></td>
+                      <td class="text-red-600" x-text="a.earlyLeaveMinutes ? a.earlyLeaveMinutes + ' daq' : '—'"></td>
+                      <td>
+                        <span class="badge" :class="'badge-' + a.status" x-text="STATUS_LABELS[a.status] || a.status"></span>
+                        <div x-show="a.isManualAdjusted" class="text-[10px] text-purple-600 mt-0.5">✎ qo'lda tuzatilgan</div>
+                      </td>
+                      <td class="text-right">
+                        <button class="btn-secondary btn-sm" @click="openAdjustModal(a)" x-show="can('attendance:adjust')">Tuzatish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="attendance.length === 0">
+                    <td colspan="10" class="text-center text-slate-400 py-10">
+                      <div x-show="!loading">Ma'lumot topilmadi</div>
+                      <div x-show="loading" class="skeleton h-6 w-48 mx-auto"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="px-4 py-3 border-t border-slate-200 text-sm text-slate-500" x-show="attendanceMeta.total">
+              Jami: <span x-text="attendanceMeta.total"></span> yozuv
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ TA'TILLAR ============ -->
+        <section x-show="page === 'leaves'" class="space-y-4">
+          <div class="card p-4 flex flex-wrap gap-3 items-end">
+            <div>
+              <label class="label">Holat</label>
+              <select x-model="leaveFilter" class="input" @change="loadLeaves()">
+                <option value="">Barchasi</option>
+                <option value="pending">Kutilmoqda</option>
+                <option value="approved">Tasdiqlangan</option>
+                <option value="rejected">Rad etilgan</option>
+              </select>
+            </div>
+            <div class="flex-1"></div>
+            <button class="btn-primary" @click="openLeaveModal()" x-show="can('leaves:write')">+ Ta'til so'rovi</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Turi</th><th>Boshlanish</th><th>Tugash</th><th>Izoh</th><th>Holat</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="l in leaves" :key="l.id">
+                    <tr>
+                      <td class="font-medium" x-text="l.Employee?.fullName || '—'"></td>
+                      <td x-text="l.LeaveType?.name || '—'"></td>
+                      <td x-text="l.startDate"></td>
+                      <td x-text="l.endDate"></td>
+                      <td class="text-slate-500 max-w-xs truncate" x-text="l.comment || '—'"></td>
+                      <td>
+                        <span class="badge"
+                              :class="l.status === 'approved' ? 'badge-present' : l.status === 'rejected' ? 'badge-absent' : 'badge-late'"
+                              x-text="l.status === 'approved' ? 'Tasdiqlangan' : l.status === 'rejected' ? 'Rad etilgan' : 'Kutilmoqda'"></span>
+                      </td>
+                      <td class="text-right whitespace-nowrap" x-show="l.status === 'pending'">
+                        <button class="btn-success btn-sm" @click="approveLeave(l)" x-show="can('leaves:approve')">Tasdiqlash</button>
+                        <button class="btn-danger btn-sm" @click="rejectLeave(l)" x-show="can('leaves:approve')">Rad etish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="leaves.length === 0">
+                    <td colspan="7" class="text-center text-slate-400 py-8">Ta'til so'rovi yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ HISOBOTLAR ============ -->
+        <section x-show="page === 'reports'" class="space-y-4">
+          <div class="card p-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+            <div>
+              <label class="label">Boshlanish</label>
+              <input type="date" x-model="reportFilters.dateFrom" class="input" @change="loadReports()">
+            </div>
+            <div>
+              <label class="label">Tugash</label>
+              <input type="date" x-model="reportFilters.dateTo" class="input" @change="loadReports()">
+            </div>
+            <div>
+              <label class="label">Bo'lim</label>
+              <select x-model="reportFilters.departmentId" class="input" @change="loadReports()">
+                <option value="">Barchasi</option>
+                <template x-for="d in departments" :key="d.id">
+                  <option :value="d.id" x-text="d.name"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="label">Yil</label>
+              <input type="number" x-model="timesheetYear" class="input" @change="loadReports()">
+            </div>
+            <div>
+              <label class="label">Oy</label>
+              <select x-model="timesheetMonth" class="input" @change="loadReports()">
+                <template x-for="m in 12" :key="m">
+                  <option :value="m" x-text="m"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="stat-card"><div class="text-xs text-slate-500">Ishda</div><div class="text-xl font-bold text-emerald-600" x-text="reports.summary?.present ?? 0"></div></div>
+            <div class="stat-card"><div class="text-xs text-slate-500">Kechikdi</div><div class="text-xl font-bold text-amber-600" x-text="reports.summary?.late ?? 0"></div></div>
+            <div class="stat-card"><div class="text-xs text-slate-500">Kelmagan</div><div class="text-xl font-bold text-red-600" x-text="reports.summary?.absent ?? 0"></div></div>
+            <div class="stat-card"><div class="text-xs text-slate-500">Ta'til</div><div class="text-xl font-bold text-blue-600" x-text="reports.summary?.leave ?? 0"></div></div>
+            <div class="stat-card"><div class="text-xs text-slate-500">Tuzatish kerak</div><div class="text-xl font-bold text-fuchsia-600" x-text="reports.summary?.incomplete ?? 0"></div></div>
+          </div>
+
+          <div class="card p-4 flex flex-wrap gap-2">
+            <button class="btn-primary" @click="exportExcel()">Excel (kunlik tabel)</button>
+            <button class="btn-secondary" @click="exportTimesheetExcel()">Excel (oylik tabel)</button>
+            <button class="btn-secondary" @click="exportTimesheetPdf()">PDF (oylik tabel)</button>
+            <button class="btn-success ml-auto" @click="generateTimesheet()" x-show="can('timesheets:write')">Oylik tabelni shakllantirish</button>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4">
+            <div class="card">
+              <div class="card-header"><span class="card-title">Kechikkanlar</span><span class="badge badge-late" x-text="reports.late.length"></span></div>
+              <div class="table-wrap max-h-80 overflow-y-auto">
+                <table class="table">
+                  <thead><tr><th>Sana</th><th>Xodim</th><th>Kechikish</th></tr></thead>
+                  <tbody>
+                    <template x-for="r in reports.late" :key="r.id">
+                      <tr>
+                        <td x-text="r.date"></td>
+                        <td x-text="r.Employee?.fullName"></td>
+                        <td class="text-amber-600" x-text="r.lateMinutes + ' daq'"></td>
+                      </tr>
+                    </template>
+                    <tr x-show="reports.late.length === 0"><td colspan="3" class="text-center text-slate-400 py-4">Kechikkanlar yo'q</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><span class="card-title">Kelmaganlar</span><span class="badge badge-absent" x-text="reports.absent.length"></span></div>
+              <div class="table-wrap max-h-80 overflow-y-auto">
+                <table class="table">
+                  <thead><tr><th>Sana</th><th>Xodim</th><th>Bo'lim</th></tr></thead>
+                  <tbody>
+                    <template x-for="r in reports.absent" :key="r.id">
+                      <tr>
+                        <td x-text="r.date"></td>
+                        <td x-text="r.Employee?.fullName"></td>
+                        <td x-text="r.Employee?.Department?.name || '—'"></td>
+                      </tr>
+                    </template>
+                    <tr x-show="reports.absent.length === 0"><td colspan="3" class="text-center text-slate-400 py-4">Kelmaganlar yo'q</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title" x-text="`Oylik tabel — ${timesheetYear}-${String(timesheetMonth).padStart(2,'0')}`"></span></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Ish kunlari</th><th>Ish soati</th><th>Kechikish</th><th>Kelmagan</th><th>Ta'til</th><th>Holat</th></tr></thead>
+                <tbody>
+                  <template x-for="t in timesheets" :key="t.id">
+                    <tr>
+                      <td class="font-medium" x-text="t.Employee?.fullName || '—'"></td>
+                      <td x-text="t.workedDays"></td>
+                      <td x-text="fmtHours(t.workedMinutes)"></td>
+                      <td class="text-amber-600" x-text="`${t.lateCount} (${t.lateMinutes} daq)`"></td>
+                      <td class="text-red-600" x-text="t.absentDays"></td>
+                      <td x-text="t.leaveDays"></td>
+                      <td><span class="badge" :class="t.status === 'approved' ? 'badge-present' : 'badge-day_off'" x-text="t.status"></span></td>
+                    </tr>
+                  </template>
+                  <tr x-show="timesheets.length === 0">
+                    <td colspan="7" class="text-center text-slate-400 py-6">Tabel shakllantirilmagan</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ AUDIT ============ -->
+        <section x-show="page === 'audit'" class="space-y-4">
+          <div class="card p-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+            <div>
+              <label class="label">Amal</label>
+              <input type="text" x-model="auditFilters.action" class="input" placeholder="attendance.adjust" @change="loadAudit()">
+            </div>
+            <div>
+              <label class="label">Obyekt</label>
+              <input type="text" x-model="auditFilters.entity" class="input" placeholder="daily_attendance" @change="loadAudit()">
+            </div>
+            <div>
+              <label class="label">Boshlanish</label>
+              <input type="date" x-model="auditFilters.dateFrom" class="input" @change="loadAudit()">
+            </div>
+            <div>
+              <label class="label">Tugash</label>
+              <input type="date" x-model="auditFilters.dateTo" class="input" @change="loadAudit()">
+            </div>
+            <button class="btn-secondary" @click="auditFilters = { action: '', entity: '', dateFrom: '', dateTo: '' }; loadAudit()">Tozalash</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Vaqt</th><th>Foydalanuvchi</th><th>Amal</th><th>Obyekt</th><th>ID</th><th>IP</th></tr></thead>
+                <tbody>
+                  <template x-for="a in auditLogs" :key="a.id">
+                    <tr>
+                      <td class="whitespace-nowrap" x-text="fmtDateTime(a.createdAt)"></td>
+                      <td x-text="a.User?.fullName || '—'"></td>
+                      <td><span class="badge badge-day_off" x-text="a.action"></span></td>
+                      <td x-text="a.entity"></td>
+                      <td class="text-slate-400" x-text="a.entityId"></td>
+                      <td class="text-slate-400" x-text="a.ipAddress || '—'"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="auditLogs.length === 0">
+                    <td colspan="6" class="text-center text-slate-400 py-8">Yozuvlar yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ SOZLAMALAR ============ -->
+        <section x-show="page === 'settings'" class="space-y-4">
+
+          <!-- Tizim sozlamalari (Telegram) -->
+          <div class="card" x-show="can('users:read')">
+            <div class="card-header">
+              <span class="card-title">Bildirishnoma va tizim sozlamalari</span>
+              <div class="flex gap-2">
+                <button class="btn-secondary btn-sm" @click="testTelegram()">Telegram test</button>
+                <button class="btn-primary btn-sm" @click="saveSettings()">Saqlash</button>
+              </div>
+            </div>
+            <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <template x-for="s in settings" :key="s.key">
+                <div>
+                  <label class="label" x-text="s.description || s.key"></label>
+                  <template x-if="s.type === 'boolean'">
+                    <label class="flex items-center gap-2 text-sm">
+                      <input type="checkbox" class="rounded" :checked="s.value" @change="s.value = $event.target.checked">
+                      <span class="text-slate-400 text-xs" x-text="s.key"></span>
+                    </label>
+                  </template>
+                  <template x-if="s.type !== 'boolean'">
+                    <input :type="s.isSecret ? 'password' : (s.type === 'number' ? 'number' : 'text')"
+                           class="input" :value="s.value" @input="s.value = $event.target.value">
+                  </template>
+                  <p class="text-[10px] text-slate-400 mt-0.5" x-text="s.key"></p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Bayramlar -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Bayram va dam kunlari</span>
+              <button class="btn-primary btn-sm" @click="openHolidayModal()" x-show="can('holidays:write')">+ Bayram</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Sana</th><th>Nomi</th><th>Ish kuni</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="h in holidays" :key="h.id">
+                    <tr>
+                      <td x-text="h.date"></td>
+                      <td class="font-medium" x-text="h.name"></td>
+                      <td><span class="badge" :class="h.isWorking ? 'badge-present' : 'badge-holiday'" x-text="h.isWorking ? 'Ish kuni' : 'Dam'"></span></td>
+                      <td class="text-right">
+                        <button class="btn-danger btn-sm" @click="deleteHoliday(h)" x-show="can('holidays:write')">O'chirish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="holidays.length === 0">
+                    <td colspan="4" class="text-center text-slate-400 py-6">Bayramlar kiritilmagan</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Foydalanuvchilar -->
+          <div class="card" x-show="can('users:read')">
+            <div class="card-header">
+              <span class="card-title">Tizim foydalanuvchilari</span>
+              <button class="btn-primary btn-sm" @click="openUserModal()" x-show="can('users:write')">+ Foydalanuvchi</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Login</th><th>Ism</th><th>Rol</th><th>Oxirgi kirish</th><th>Holat</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="u in users" :key="u.id">
+                    <tr>
+                      <td class="font-medium" x-text="u.username"></td>
+                      <td x-text="u.fullName"></td>
+                      <td><span class="badge badge-day_off" x-text="ROLE_LABELS[u.Role?.name] || u.Role?.name"></span></td>
+                      <td x-text="fmtDateTime(u.lastLoginAt)"></td>
+                      <td><span class="badge" :class="u.isActive ? 'badge-present' : 'badge-absent'" x-text="u.isActive ? 'Faol' : 'Bloklangan'"></span></td>
+                      <td class="text-right">
+                        <button class="btn-secondary btn-sm" @click="userForm = Object.assign({}, u, { password: '' }); showUserModal = true" x-show="can('users:write')">Tahrir</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Rollar -->
+          <div class="card" x-show="can('users:read')">
+            <div class="card-header">
+              <span class="card-title">Rollar va huquqlar</span>
+              <span class="text-xs text-slate-500">Huquqni yoqish yoki o'chirish uchun belgilang va "Saqlash"ni bosing</span>
+            </div>
+            <div class="p-4 space-y-4">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <template x-for="role in roles" :key="role.id">
+                  <div class="border border-slate-200 rounded-lg overflow-hidden">
+                    <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                      <div>
+                        <div class="font-semibold text-sm" x-text="ROLE_LABELS[role.name] || role.name"></div>
+                        <div class="text-xs text-slate-500" x-text="`${role.name} · ${role.userCount} foydalanuvchi`"></div>
+                      </div>
+                      <div class="flex gap-1">
+                        <button class="btn-secondary btn-sm" @click="resetRolePermissions(role.id)">Tiklash</button>
+                        <button class="btn-primary btn-sm" @click="saveRolePermissions(role.id)" x-show="can('users:write')">Saqlash</button>
+                      </div>
+                    </div>
+                    <div class="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                      <template x-for="p in (roleMatrix[role.id]?.permissions || [])" :key="p.permission">
+                        <label class="flex items-center gap-3 px-4 py-1.5 hover:bg-slate-50 cursor-pointer">
+                          <input type="checkbox" class="rounded" :checked="p.enabled"
+                                 @change="toggleRolePermission(role.id, p.permission)"
+                                 :disabled="!can('users:write')">
+                          <span class="text-sm flex-1" x-text="p.permission"></span>
+                          <span class="badge badge-late text-[10px]" x-show="p.overridden">o'zgartirilgan</span>
+                        </label>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Xatolar -->
+          <div class="card" x-show="can('users:read')">
+            <div class="card-header">
+              <span class="card-title">Server xatolari (oxirgi 50 ta)</span>
+              <span class="text-xs text-slate-500" x-show="errorStats" x-text="errorStats ? `7 kunda: ${errorStats.total} ta` : ''"></span>
+            </div>
+            <div class="table-wrap max-h-96 overflow-y-auto">
+              <table class="table">
+                <thead><tr><th>Vaqt</th><th>Daraja</th><th>Xato</th><th>Endpoint</th></tr></thead>
+                <tbody>
+                  <template x-for="e in errorLogs" :key="e.id">
+                    <tr>
+                      <td class="whitespace-nowrap" x-text="fmtDateTime(e.createdAt)"></td>
+                      <td><span class="badge" :class="e.level === 'error' ? 'badge-absent' : 'badge-late'" x-text="e.level"></span></td>
+                      <td class="text-slate-600" x-text="e.message"></td>
+                      <td class="text-slate-400" x-text="`${e.method || ''} ${e.path || ''}`"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="errorLogs.length === 0">
+                    <td colspan="4" class="text-center text-slate-400 py-6">Xatolar yo'q 🎉</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ OYLIK OQIM (davr) ============ -->
+        <section x-show="page === 'periods'" class="space-y-4">
+          <div class="card p-4 grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label class="label">Yil</label>
+              <input type="number" x-model="timesheetYear" class="input" @change="loadPeriods()">
+            </div>
+            <div>
+              <label class="label">Oy</label>
+              <select x-model="timesheetMonth" class="input" @change="loadPeriods()">
+                <template x-for="m in 12" :key="m"><option :value="m" x-text="m"></option></template>
+              </select>
+            </div>
+            <div>
+              <label class="label">Davr holati</label>
+              <div class="input bg-slate-50 flex items-center">
+                <span class="badge"
+                      :class="periodStatus === 'locked' ? 'badge-absent' : periodStatus === 'approved' ? 'badge-present' : 'badge-late'"
+                      x-text="periodStatus"></span>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-secondary flex-1" @click="periodAction('submit')" x-show="can('timesheets:write')">Yuborish</button>
+              <button class="btn-primary flex-1" @click="periodAction('approve')" x-show="can('timesheets:approve')">Tasdiqlash</button>
+              <button class="btn-danger flex-1" @click="periodAction('lock')" x-show="can('timesheets:approve')">Yopish</button>
+            </div>
+          </div>
+
+          <div class="card p-4 bg-blue-50 border-blue-200 text-sm text-blue-800">
+            ℹ️ <b>Yopilgan davr</b> — tasdiqlangan raqamlar himoya qilinadi: avtomatik qayta hisoblash
+            yopilgan oyga tegmaydi. Davrni faqat qayta ochish (unlock) orqali o'zgartirish mumkin.
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Oylik davrlar tarixi</span></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Davr</th><th>Holat</th><th>Tasdiqlagan</th><th>Yopilgan</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="p in periods" :key="p.id">
+                    <tr>
+                      <td class="font-medium" x-text="`${p.year}-${String(p.month).padStart(2,'0')}`"></td>
+                      <td><span class="badge" :class="p.status === 'locked' ? 'badge-absent' : p.status === 'approved' ? 'badge-present' : 'badge-late'" x-text="p.status"></span></td>
+                      <td x-text="p.approvedAt ? fmtDateTime(p.approvedAt) : '—'"></td>
+                      <td x-text="p.lockedAt ? fmtDateTime(p.lockedAt) : '—'"></td>
+                      <td class="text-right">
+                        <button class="btn-secondary btn-sm" @click="periodAction('unlock')" x-show="p.status === 'locked' && can('timesheets:approve')">Qayta ochish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="periods.length === 0">
+                    <td colspan="5" class="text-center text-slate-400 py-6">Davr tarixi yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ TA'TIL BALANSI ============ -->
+        <section x-show="page === 'balances'" class="space-y-4">
+          <div class="card p-4 flex flex-wrap gap-3 items-center justify-between">
+            <div class="text-sm text-slate-600">
+              Har bir xodim va ta'til turi bo'yicha berilgan, sarflangan va qolgan kunlar.
+              <span class="text-xs text-slate-400">Yilni o'zgartirish uchun yuqoridagi tanlagichdan foydalaning (Tabel → Hisobotlar)</span>
+            </div>
+            <button class="btn-secondary" @click="loadBalances()">Yangilash</button>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Xodimlar kesimi</span></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Bo'lim</th><th>Tur</th><th>Berilgan</th><th>Sarflangan</th><th>Qolgan</th></tr></thead>
+                <tbody>
+                  <template x-for="(row, i) in balances" :key="'b'+i">
+                    <template x-for="(b, j) in row.balances" :key="j">
+                      <tr>
+                        <td class="font-medium" x-text="row.employee?.fullName || '—'"></td>
+                        <td x-text="row.employee?.Department?.name || '—'"></td>
+                        <td x-text="b.leaveTypeName"></td>
+                        <td x-text="b.entitledDays + ' kun'"></td>
+                        <td class="text-amber-600" x-text="b.usedDays + ' kun'"></td>
+                        <td><span class="badge" :class="b.remainingDays > 0 ? 'badge-present' : 'badge-absent'" x-text="b.remainingDays + ' kun'"></span></td>
+                      </tr>
+                    </template>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ OVERTIME ============ -->
+        <section x-show="page === 'overtime'" class="space-y-4">
+          <div class="card p-4 flex flex-wrap gap-3 items-end justify-between">
+            <div class="flex gap-2">
+              <div>
+                <label class="label">Yil</label>
+                <input type="number" x-model="timesheetYear" class="input w-24" @change="loadOvertime()">
+              </div>
+              <div>
+                <label class="label">Oy</label>
+                <select x-model="timesheetMonth" class="input" @change="loadOvertime()">
+                  <template x-for="m in 12" :key="m"><option :value="m" x-text="m"></option></template>
+                </select>
+              </div>
+            </div>
+            <button class="btn-primary" @click="openOvertimeModal()" x-show="can('attendance:adjust')">+ Qo'shimcha ish vaqti</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Soatlar</th><th>Tur</th><th>Koef.</th><th>To'lanadigan</th></tr></thead>
+                <tbody>
+                  <template x-for="row in overtimeRows" :key="row.employee.id">
+                    <tr>
+                      <td class="font-medium" x-text="row.employee.fullName"></td>
+                      <td x-text="row.totalHours + ' soat'"></td>
+                      <td class="text-slate-500" x-text="Object.keys(row.byKind).join(', ') || '—'"></td>
+                      <td x-text="row.paidHours + ' soat'"></td>
+                      <td><span class="badge badge-late" x-text="row.totalHours ? (row.totalHours + ' soat') : '—'"></span></td>
+                    </tr>
+                  </template>
+                  <tr x-show="overtimeRows.length === 0">
+                    <td colspan="5" class="text-center text-slate-400 py-6">Qo'shimcha ish vaqti yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ SO'ROVLAR ============ -->
+        <section x-show="page === 'requests'" class="space-y-4">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Kelish/ketishni tasdiqlashga so'rovlar</span></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Sana</th><th>Kelish</th><th>Ketish</th><th>Sabab</th><th>Holat</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="r in requests" :key="r.id">
+                    <tr>
+                      <td class="font-medium" x-text="r.Employee?.fullName || '—'"></td>
+                      <td x-text="r.date"></td>
+                      <td x-text="r.requestedIn || '—'"></td>
+                      <td x-text="r.requestedOut || '—'"></td>
+                      <td class="text-slate-500 max-w-xs truncate" x-text="r.reason || '—'"></td>
+                      <td><span class="badge" :class="r.status === 'approved' ? 'badge-present' : r.status === 'rejected' ? 'badge-absent' : 'badge-late'" x-text="r.status"></span></td>
+                      <td class="text-right whitespace-nowrap" x-show="r.status === 'pending'">
+                        <button class="btn-success btn-sm" @click="reviewRequest(r.id, 'approved')" x-show="can('attendance:adjust')">Tasdiqlash</button>
+                        <button class="btn-danger btn-sm" @click="reviewRequest(r.id, 'rejected')" x-show="can('attendance:adjust')">Rad etish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="requests.length === 0">
+                    <td colspan="7" class="text-center text-slate-400 py-8">So'rovlar yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ ROZILIKLAR ============ -->
+        <section x-show="page === 'consents'" class="space-y-4">
+          <div class="card p-4 flex flex-wrap gap-3 items-center justify-between">
+            <div class="text-sm text-slate-600">
+              Biometrik ma'lumotga rozilik registri. Rozilik muddati tugagan yoki bekor qilingan
+              xodimlar ro'yxatdan chiqarilishi kerak.
+            </div>
+            <button class="btn-primary" @click="openConsentModal()" x-show="can('employees:write')">+ Rozilik qayd etish</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Xodim</th><th>Turi</th><th>Hujjat №</th><th>Berilgan</th><th>Muddati</th><th>Holat</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="c in consents" :key="c.id">
+                    <tr>
+                      <td class="font-medium" x-text="c.Employee?.fullName || '—'"></td>
+                      <td x-text="c.kind"></td>
+                      <td class="text-slate-500" x-text="c.documentNo || '—'"></td>
+                      <td x-text="fmtDate(c.givenAt)"></td>
+                      <td x-text="c.expiresAt ? fmtDate(c.expiresAt) : 'Muddatsiz'"></td>
+                      <td><span class="badge" :class="c.revokedAt ? 'badge-absent' : 'badge-present'" x-text="c.revokedAt ? 'bekor qilingan' : 'kuchli'"></span></td>
+                      <td class="text-right">
+                        <button class="btn-danger btn-sm" @click="$dispatch('revoke-consent', c.id)" x-show="!c.revokedAt && can('employees:write')">Bekor qilish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="consents.length === 0">
+                    <td colspan="7" class="text-center text-slate-400 py-8">Roziliklar ro'yxati bo'sh</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ HISOBOT KONSTRUKTORI ============ -->
+        <section x-show="page === 'builder'" class="space-y-4">
+          <div class="card p-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+            <div>
+              <label class="label">Boshlanish</label>
+              <input type="date" x-model="builderFilters.dateFrom" class="input" @change="runBuilder()">
+            </div>
+            <div>
+              <label class="label">Tugash</label>
+              <input type="date" x-model="builderFilters.dateTo" class="input" @change="runBuilder()">
+            </div>
+            <div>
+              <label class="label">Bo'lim</label>
+              <select x-model="builderFilters.departmentId" class="input" @change="runBuilder()">
+                <option value="">Barchasi</option>
+                <template x-for="d in departments" :key="d.id"><option :value="d.id" x-text="d.name"></option></template>
+              </select>
+            </div>
+            <div>
+              <label class="label">Holat</label>
+              <select x-model="builderFilters.status" class="input" @change="runBuilder()">
+                <option value="">Barchasi</option>
+                <template x-for="(label, key) in STATUS_LABELS" :key="key"><option :value="key" x-text="label"></option></template>
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-secondary flex-1" @click="runBuilder()">Yangi</button>
+              <button class="btn-primary flex-1" @click="saveTemplate()" x-show="can('reports:write')">Shablon saqlash</button>
+            </div>
+          </div>
+
+          <div class="card p-4">
+            <div class="text-xs font-medium text-slate-500 mb-2">Ustunlar (boshlash uchun bosing):</div>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="c in builderColumns" :key="c.key">
+                <button class="px-2.5 py-1 rounded-lg text-xs border transition"
+                        :class="builderSelected.includes(c.key) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'"
+                        @click="toggleBuilderColumn(c.key); runBuilder()"
+                        x-text="c.label"></button>
+              </template>
+            </div>
+          </div>
+
+          <div class="card" x-show="reportTemplates.length > 0">
+            <div class="card-header"><span class="card-title">Saqlangan shablonlar</span></div>
+            <div class="p-3 flex flex-wrap gap-2">
+              <template x-for="tpl in reportTemplates" :key="tpl.id">
+                <button class="btn-secondary btn-sm" @click="applyTemplate(tpl)" x-text="tpl.name"></button>
+              </template>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Natijalar (<span x-text="builderRows.length"></span> qator)</span>
+            </div>
+            <div class="table-wrap max-h-[32rem] overflow-y-auto">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <template x-for="c in builderSelected" :key="c.key">
+                      <th x-text="(builderColumns.find(x => x.key === c) || {}).label || c"></th>
+                    </template>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(row, i) in builderRows" :key="i">
+                    <tr>
+                      <template x-for="c in builderSelected" :key="c">
+                        <td x-text="row[c] === null || row[c] === undefined ? '—' : row[c]"></td>
+                      </template>
+                    </tr>
+                  </template>
+                  <tr x-show="builderRows.length === 0">
+                    <td :colspan="builderSelected.length" class="text-center text-slate-400 py-8">Ma'lumot topilmadi</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ PAYROLL ============ -->
+        <section x-show="page === 'payroll'" class="space-y-4">
+          <div class="card p-4 grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+            <div>
+              <label class="label">Yil</label>
+              <input type="number" x-model="timesheetYear" class="input" @change="loadPayroll()">
+            </div>
+            <div>
+              <label class="label">Oy</label>
+              <select x-model="timesheetMonth" class="input" @change="loadPayroll()">
+                <template x-for="m in 12" :key="m"><option :value="m" x-text="m"></option></template>
+              </select>
+            </div>
+            <div>
+              <label class="label">Soatlik (so'm)</label>
+              <input type="number" x-model="payrollRates.baseRate" class="input" @change="loadPayroll()">
+            </div>
+            <div>
+              <label class="label">Overtime (so'm/soat)</label>
+              <input type="number" x-model="payrollRates.overtimeRate" class="input" @change="loadPayroll()">
+            </div>
+            <div>
+              <label class="label">Kechikish (so'm/daq)</label>
+              <input type="number" x-model="payrollRates.latePenaltyPerMinute" class="input" @change="loadPayroll()">
+            </div>
+            <div>
+              <label class="label">Absent (so'm/kun)</label>
+              <input type="number" x-model="payrollRates.absenceDeductionPerDay" class="input" @change="loadPayroll()">
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Hisob-chek</span>
+              <span class="text-sm text-slate-500" x-show="payroll">
+                Jami: <b x-text="payroll?.totals?.workedHours"></b> soat ·
+                <b x-text="payroll?.totals?.gross"></b> so'm
+              </span>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>№</th><th>Xodim</th><th>Bo'lim</th><th>Kun</th><th>Soat</th><th>Overtime</th><th>Kech.</th><th>Jami (so'm)</th></tr></thead>
+                <tbody>
+                  <template x-for="(r, i) in (payroll?.rows || [])" :key="r.employeeId">
+                    <tr>
+                      <td class="text-slate-400" x-text="i + 1"></td>
+                      <td class="font-medium" x-text="r.fullName"></td>
+                      <td x-text="r.department"></td>
+                      <td x-text="r.presentDays"></td>
+                      <td x-text="r.workedHours"></td>
+                      <td x-text="r.overtimeHours"></td>
+                      <td class="text-amber-600" x-text="r.lateMinutes"></td>
+                      <td class="font-medium" x-text="r.gross"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="!(payroll?.rows || []).length">
+                    <td colspan="8" class="text-center text-slate-400 py-8">Ma'lumot topilmadi</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ XAVFSIZLIK ============ -->
+        <section x-show="page === 'security'" class="space-y-4">
+          <div class="grid lg:grid-cols-2 gap-5">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Ikki omilli autentifikatsiya (2FA)</span>
+                <button class="btn-primary btn-sm" @click="setupTwoFactor()" x-show="!twoFactorSetup">Sozlash</button>
+              </div>
+              <div class="p-4 space-y-3">
+                <div x-show="twoFactorSetup" class="space-y-2">
+                  <div class="text-sm text-slate-600">Autentifikator ilovasiga ushbu kalitni qo'shing:</div>
+                  <code class="block p-3 rounded-lg bg-slate-900 text-slate-100 text-xs break-all" x-text="twoFactorSetup?.secret"></code>
+                  <div class="text-xs text-slate-500 break-all" x-text="twoFactorSetup?.otpauthUrl"></div>
+                  <button class="btn-success btn-sm" @click="enableTwoFactor()">Kodni tasdiqlash va yoqish</button>
+                </div>
+                <div x-show="!twoFactorSetup" class="text-sm text-slate-500">
+                  2FA yoqilmagan. Google Authenticator / Aegis ilovasi bilan TOTP kodlari qo'llaniladi.
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Audit log zanjiri</span>
+                <button class="btn-secondary btn-sm" @click="loadSecurity()">Tekshirish</button>
+              </div>
+              <div class="p-4">
+                <div x-show="auditVerification" class="rounded-lg p-3 text-sm"
+                     :class="auditVerification?.valid ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'">
+                  <div class="font-semibold" x-text="auditVerification?.valid ? 'Zanjir butun' : 'Zanjir buzilgan!'"></div>
+                  <div class="text-xs mt-1" x-text="`Tekshirilgan yozuvlar: ${auditVerification?.checked}` + (auditVerification?.brokenAt ? `, buzilgan: #${auditVerification.brokenAt}` : '')"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">API kalitlari (tashqi integratsiyalar uchun)</span>
+              <button class="btn-primary btn-sm" @click="createApiKey()" x-show="can('users:write')">+ Kalit yaratish</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Nomi</th><th>Kalit</th><th>Oxirgi foydalanish</th><th>Muddati</th><th>Holat</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="k in apiKeys" :key="k.id">
+                    <tr>
+                      <td class="font-medium" x-text="k.name"></td>
+                      <td><code class="text-xs bg-slate-100 px-1.5 py-0.5 rounded" x-text="k.keyPrefix + '…'"></code></td>
+                      <td x-text="k.lastUsedAt ? fmtAgo(k.lastUsedAt) : 'ishlatilmagan'"></td>
+                      <td x-text="k.expiresAt ? fmtDate(k.expiresAt) : 'Muddatsiz'"></td>
+                      <td><span class="badge" :class="k.revokedAt ? 'badge-absent' : 'badge-present'" x-text="k.revokedAt ? 'bekor' : 'faol'"></span></td>
+                      <td class="text-right">
+                        <button class="btn-danger btn-sm" @click="revokeApiKey(k.id)" x-show="!k.revokedAt && can('users:write')">Bekor qilish</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="apiKeys.length === 0">
+                    <td colspan="6" class="text-center text-slate-400 py-6">API kalitlari yo'q</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ MENIM PANEL ============ -->
+        <section x-show="page === 'my'" class="space-y-4">
+          <template x-if="myProfile">
+            <div class="space-y-4">
+              <div class="card p-4">
+                <div class="flex items-center gap-4">
+                  <div class="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg font-bold"
+                       x-text="(myProfile.employee.fullName || '?').charAt(0)"></div>
+                  <div>
+                    <div class="text-lg font-semibold" x-text="myProfile.employee.fullName"></div>
+                    <div class="text-sm text-slate-500" x-text="`Tabel № ${myProfile.employee.employeeNo} · ${myProfile.employee.department || '—'}`"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="stat-card"><div class="text-xs text-slate-500">Ishda (shu oy)</div><div class="text-2xl font-bold text-emerald-600" x-text="myProfile.summary.present"></div></div>
+                <div class="stat-card"><div class="text-xs text-slate-500">Kechikdi</div><div class="text-2xl font-bold text-amber-600" x-text="myProfile.summary.late"></div></div>
+                <div class="stat-card"><div class="text-xs text-slate-500">Ish soati</div><div class="text-2xl font-bold text-slate-700" x-text="fmtHours(myProfile.summary.workedMinutes)"></div></div>
+                <div class="stat-card"><div class="text-xs text-slate-500">Kechikish (daq)</div><div class="text-2xl font-bold text-amber-600" x-text="myProfile.summary.lateMinutes"></div></div>
+              </div>
+
+              <div class="grid lg:grid-cols-2 gap-5">
+                <div class="card">
+                  <div class="card-header"><span class="card-title">Ta'til balansim</span></div>
+                  <div class="table-wrap">
+                    <table class="table">
+                      <thead><tr><th>Tur</th><th>Berilgan</th><th>Sarflangan</th><th>Qolgan</th></tr></thead>
+                      <tbody>
+                        <template x-for="b in myBalances" :key="b.leaveTypeId">
+                          <tr>
+                            <td x-text="b.leaveTypeName"></td>
+                            <td x-text="b.entitledDays"></td>
+                            <td x-text="b.usedDays"></td>
+                            <td><span class="badge" :class="b.remainingDays > 0 ? 'badge-present' : 'badge-absent'" x-text="b.remainingDays"></span></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-header"><span class="card-title">Kelishni tasdiqlashga so'rov</span></div>
+                  <div class="p-4 space-y-3">
+                    <div class="grid grid-cols-3 gap-2">
+                      <div><label class="label">Sana</label><input type="date" x-model="myRequestForm.date" class="input"></div>
+                      <div><label class="label">Kelish</label><input type="time" x-model="myRequestForm.requestedIn" class="input"></div>
+                      <div><label class="label">Ketish</label><input type="time" x-model="myRequestForm.requestedOut" class="input"></div>
+                    </div>
+                    <div><label class="label">Sabab *</label><textarea x-model="myRequestForm.reason" class="input" rows="2" placeholder="Masalan: Terminal ishlamadi, qo'lda qayd etdim"></textarea></div>
+                    <button class="btn-primary" @click="submitMyRequest()">So'rov yuborish</button>
+
+                    <div class="pt-2 border-t border-slate-100">
+                      <template x-for="r in myRequests" :key="r.id">
+                        <div class="flex items-center justify-between py-1.5 text-sm">
+                          <span x-text="`${r.date} ${r.reason || ''}`"></span>
+                          <span class="badge" :class="r.status === 'approved' ? 'badge-present' : r.status === 'rejected' ? 'badge-absent' : 'badge-late'" x-text="r.status"></span>
+                        </div>
+                      </template>
+                      <p x-show="myRequests.length === 0" class="text-sm text-slate-400">So'rovlar yo'q</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header"><span class="card-title">Mening davomatim (shu oy)</span></div>
+                <div class="table-wrap max-h-96 overflow-y-auto">
+                  <table class="table">
+                    <thead><tr><th>Sana</th><th>Kelish</th><th>Ketish</th><th>Ish vaqti</th><th>Kechikish</th><th>Holat</th></tr></thead>
+                    <tbody>
+                      <template x-for="d in myProfile.daily" :key="d.id">
+                        <tr>
+                          <td x-text="d.date"></td>
+                          <td x-text="fmtTime(d.firstIn)"></td>
+                          <td x-text="fmtTime(d.lastOut)"></td>
+                          <td x-text="fmtHours(d.workedMinutes)"></td>
+                          <td class="text-amber-600" x-text="d.lateMinutes ? d.lateMinutes + ' daq' : '—'"></td>
+                          <td><span class="badge" :class="'badge-' + d.status" x-text="STATUS_LABELS[d.status]"></span></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="!myProfile" class="card p-10 text-center text-slate-400">
+            <p class="text-lg">Bu hisob biriktirilmagan.</p>
+            <p class="text-sm mt-2">Kadrlar bo'limiga murojaat qiling — sizning hisobingizga xodim biriktirish kerak.</p>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ================= MODALLAR ================= -->
+
+  <!-- Profil -->
+  <div x-show="showProfileModal" x-cloak class="modal-backdrop" @click.self="showProfileModal = false">
+    <div class="modal max-w-md">
+      <div class="card-header">
+        <span class="card-title">Profil</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showProfileModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="label">Login</label>
+          <input type="text" class="input bg-slate-50" :value="user?.username" disabled>
+        </div>
+        <div>
+          <label class="label">F.I.O</label>
+          <input type="text" x-model="profileForm.fullName" class="input">
+        </div>
+        <div>
+          <label class="label">Telefon</label>
+          <input type="text" x-model="profileForm.phone" class="input">
+        </div>
+        <div>
+          <label class="label">Rol</label>
+          <input type="text" class="input bg-slate-50" :value="user ? (ROLE_LABELS[user.role] || user.role) : ''" disabled>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showProfileModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveProfile()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parol -->
+  <div x-show="showPasswordModal" x-cloak class="modal-backdrop" @click.self="showPasswordModal = false">
+    <div class="modal max-w-md">
+      <div class="card-header">
+        <span class="card-title">Parolni o'zgartirish</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showPasswordModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div x-show="user?.mustChangePassword" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3">
+          ⚠️ Birinchi kirishingizda parolni o'zgartirishingiz shart.
+        </div>
+        <div>
+          <label class="label">Joriy parol *</label>
+          <input type="password" x-model="passwordForm.currentPassword" class="input" :class="passwordErrors.currentPassword && 'border-red-400'">
+        </div>
+        <div>
+          <label class="label">Yangi parol *</label>
+          <input type="password" x-model="passwordForm.newPassword" class="input" :class="passwordErrors.newPassword && 'border-red-400'">
+          <p class="text-[11px] text-slate-400 mt-1">Kamida 8 belgi, katta/kichik harf, raqam va maxsus belgi</p>
+        </div>
+        <div>
+          <label class="label">Yangi parolni tasdiqlang *</label>
+          <input type="password" x-model="passwordForm.confirmPassword" class="input" :class="passwordErrors.confirmPassword && 'border-red-400'">
+        </div>
+        <p class="text-xs text-red-600" x-show="passwordErrors.currentPassword" x-text="passwordErrors.currentPassword"></p>
+        <p class="text-xs text-red-600" x-show="passwordErrors.newPassword" x-text="passwordErrors.newPassword"></p>
+        <p class="text-xs text-red-600" x-show="passwordErrors.confirmPassword" x-text="passwordErrors.confirmPassword"></p>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showPasswordModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="changePassword()">O'zgartirish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sessiyalar -->
+  <div x-show="sessions.length > 0 && showSessions" x-cloak class="modal-backdrop" @click.self="showSessions = false">
+    <div class="modal max-w-lg">
+      <div class="card-header">
+        <span class="card-title">Faol sessiyalar</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showSessions = false">✕</button>
+      </div>
+      <div class="p-5 space-y-2 max-h-80 overflow-y-auto">
+        <template x-for="s in sessions" :key="s.id">
+          <div class="flex items-center justify-between p-3 rounded-lg border border-slate-200">
+            <div class="min-w-0">
+              <div class="text-sm font-medium" x-text="s.userAgent || 'Noma\'lum qurilma'"></div>
+              <div class="text-xs text-slate-500" x-text="`${s.ipAddress || '—'} · ${fmtAgo(s.createdAt)}`"></div>
+            </div>
+            <span class="badge" :class="s.current ? 'badge-present' : 'badge-day_off'" x-text="s.current ? 'joriy' : 'boshqa'"></span>
+          </div>
+        </template>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-danger btn-sm" @click="revokeSessions()">Boshqalarini bekor qilish</button>
+        <button class="btn-secondary" @click="showSessions = false">Yopish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Xodim -->
+  <div x-show="showEmployeeModal" x-cloak class="modal-backdrop" @click.self="showEmployeeModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title" x-text="employeeForm.id ? 'Xodimni tahrirlash' : 'Yangi xodim'"></span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showEmployeeModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3 overflow-y-auto">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="label">F.I.O *</label>
+            <input type="text" x-model="employeeForm.fullName" class="input" :class="employeeErrors.fullName && 'border-red-400'">
+            <p class="text-xs text-red-600" x-show="employeeErrors.fullName" x-text="employeeErrors.fullName"></p>
+          </div>
+          <div>
+            <label class="label">Tabel raqami *</label>
+            <input type="text" x-model="employeeForm.employeeNo" class="input" :class="employeeErrors.employeeNo && 'border-red-400'">
+            <p class="text-xs text-red-600" x-show="employeeErrors.employeeNo" x-text="employeeErrors.employeeNo"></p>
+          </div>
+          <div>
+            <label class="label">Terminaldagi ID</label>
+            <input type="text" x-model="employeeForm.terminalUserId" class="input" placeholder="Bo'sh bo'lsa tabel raqami">
+          </div>
+          <div>
+            <label class="label">Bo'lim</label>
+            <select x-model="employeeForm.departmentId" class="input">
+              <option value="">Tanlanmagan</option>
+              <template x-for="d in departments" :key="d.id">
+                <option :value="d.id" x-text="d.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="label">Lavozim</label>
+            <select x-model="employeeForm.positionId" class="input">
+              <option value="">Tanlanmagan</option>
+              <template x-for="p in positions" :key="p.id">
+                <option :value="p.id" x-text="p.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="label">Ishga olish sanasi</label>
+            <input type="date" x-model="employeeForm.hireDate" class="input">
+          </div>
+          <div>
+            <label class="label">Telefon</label>
+            <input type="text" x-model="employeeForm.phone" class="input">
+          </div>
+          <div class="col-span-2">
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" x-model="employeeForm.isActive" class="rounded">
+              Faol xodim
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showEmployeeModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveEmployee()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal -->
+  <div x-show="showTerminalModal" x-cloak class="modal-backdrop" @click.self="showTerminalModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title" x-text="terminalForm.id ? 'Terminalni tahrirlash' : 'Yangi terminal'"></span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showTerminalModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3 overflow-y-auto">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="label">Nom *</label>
+            <input type="text" x-model="terminalForm.name" class="input" placeholder="Asosiy kirish">
+          </div>
+          <div>
+            <label class="label">IP manzil *</label>
+            <input type="text" x-model="terminalForm.ipAddress" class="input" placeholder="192.168.50.11">
+          </div>
+          <div>
+            <label class="label">Port</label>
+            <input type="number" x-model="terminalForm.port" class="input">
+          </div>
+          <div>
+            <label class="label">ISAPI login</label>
+            <input type="text" x-model="terminalForm.username" class="input">
+          </div>
+          <div>
+            <label class="label">ISAPI parol *</label>
+            <input type="password" x-model="terminalForm.password" class="input" :placeholder="terminalForm.id ? 'O\'zgartirmaslik uchun bo\'sh qoldiring' : ''">
+          </div>
+          <div>
+            <label class="label">Yo'nalish</label>
+            <select x-model="terminalForm.direction" class="input">
+              <option value="both">Kirish + chiqish</option>
+              <option value="in">Faqat kirish</option>
+              <option value="out">Faqat chiqish</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Joylashuv</label>
+            <input type="text" x-model="terminalForm.location" class="input" placeholder="1-qavat, registratura">
+          </div>
+          <div class="col-span-2">
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" x-model="terminalForm.isActive" class="rounded"> Faol
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showTerminalModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveTerminal()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Smena -->
+  <div x-show="showShiftModal" x-cloak class="modal-backdrop" @click.self="showShiftModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title" x-text="shiftForm.id ? 'Smenani tahrirlash' : 'Yangi smena'"></span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showShiftModal = false">✕</button>
+      </div>
+      <div class="p-5 grid grid-cols-2 gap-3 overflow-y-auto">
+        <div class="col-span-2">
+          <label class="label">Nomi *</label>
+          <input type="text" x-model="shiftForm.name" class="input" placeholder="Kunduzgi 08:00-17:00">
+        </div>
+        <div>
+          <label class="label">Boshlanish *</label>
+          <input type="time" x-model="shiftForm.startTime" class="input">
+        </div>
+        <div>
+          <label class="label">Tugash *</label>
+          <input type="time" x-model="shiftForm.endTime" class="input">
+        </div>
+        <div class="col-span-2">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" x-model="shiftForm.crossesMidnight" class="rounded"> Kechasiga o'tadi (tungi smena)
+          </label>
+        </div>
+        <div>
+          <label class="label">Kechikish grace (daq)</label>
+          <input type="number" x-model="shiftForm.graceLateMinutes" class="input">
+        </div>
+        <div>
+          <label class="label">Erta ketish grace (daq)</label>
+          <input type="number" x-model="shiftForm.graceEarlyMinutes" class="input">
+        </div>
+        <div>
+          <label class="label">Tanaffus (daq)</label>
+          <input type="number" x-model="shiftForm.breakMinutes" class="input">
+        </div>
+        <div>
+          <label class="label">Min. ish vaqti (daq)</label>
+          <input type="number" x-model="shiftForm.minWorkMinutes" class="input">
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showShiftModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveShift()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grafik -->
+  <div x-show="showScheduleModal" x-cloak class="modal-backdrop" @click.self="showScheduleModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title" x-text="scheduleForm.id ? 'Grafikni tahrirlash' : 'Yangi grafik'"></span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showScheduleModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3 overflow-y-auto">
+        <div>
+          <label class="label">Xodim *</label>
+          <select x-model="scheduleForm.employeeId" class="input">
+            <option value="">Tanlang</option>
+            <template x-for="e in employees" :key="e.id">
+              <option :value="e.id" x-text="e.fullName"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="label">Smena *</label>
+          <select x-model="scheduleForm.shiftId" class="input">
+            <option value="">Tanlang</option>
+            <template x-for="s in shifts" :key="s.id">
+              <option :value="s.id" x-text="s.name"></option>
+            </template>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Kimdan *</label>
+            <input type="date" x-model="scheduleForm.validFrom" class="input">
+          </div>
+          <div>
+            <label class="label">Kimgacha</label>
+            <input type="date" x-model="scheduleForm.validTo" class="input">
+          </div>
+        </div>
+        <div>
+          <label class="label">Ish kunlari</label>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="w in [1,2,3,4,5,6,7]" :key="w">
+              <label class="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-2 py-1 cursor-pointer">
+                <input type="checkbox" :value="w" x-model="scheduleForm.weekdays" class="rounded">
+                <span x-text="weekdayName(w)"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showScheduleModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveSchedule()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk grafik -->
+  <div x-show="showBulkModal" x-cloak class="modal-backdrop" @click.self="showBulkModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title">Ko'p xodimga bir vaqtda grafik</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showBulkModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Smena *</label>
+            <select x-model="bulkForm.shiftId" class="input">
+              <template x-for="s in shifts" :key="s.id">
+                <option :value="s.id" x-text="s.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="label">Kimdan *</label>
+            <input type="date" x-model="bulkForm.validFrom" class="input">
+          </div>
+          <div>
+            <label class="label">Kimgacha</label>
+            <input type="date" x-model="bulkForm.validTo" class="input">
+          </div>
+          <div>
+            <label class="label">Ish kunlari</label>
+            <div class="flex flex-wrap gap-1">
+              <template x-for="w in [1,2,3,4,5,6,7]" :key="w">
+                <label class="flex items-center gap-1 text-xs border border-slate-300 rounded px-1.5 py-0.5 cursor-pointer">
+                  <input type="checkbox" :value="w" x-model="bulkForm.weekdays" class="rounded">
+                  <span x-text="weekdayName(w)"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="label">Xodimlar (tanlangan: <span x-text="bulkForm.employeeIds.length"></span>)</label>
+            <button class="text-xs text-blue-600 hover:underline" @click="selectAllBulk()">Hammasini tanlash</button>
+          </div>
+          <div class="border border-slate-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
+            <template x-for="e in employees" :key="e.id">
+              <label class="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm">
+                <input type="checkbox" class="rounded" :checked="bulkForm.employeeIds.includes(e.id)"
+                       @change="toggleBulkEmployee(e.id)">
+                <span class="flex-1" x-text="e.fullName"></span>
+                <span class="text-xs text-slate-400" x-text="e.Department?.name || ''"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <div x-show="bulkResult" class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
+          <span x-text="`${bulkResult?.created} ta grafik yaratildi, ${bulkResult?.skipped} ta mavjud bo'lgani uchun o'tkazildi`"></span>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showBulkModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveBulkSchedule()" :disabled="bulkForm.employeeIds.length === 0">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ta'til -->
+  <div x-show="showLeaveModal" x-cloak class="modal-backdrop" @click.self="showLeaveModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title">Ta'til so'rovi</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showLeaveModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="label">Xodim *</label>
+          <select x-model="leaveForm.employeeId" class="input">
+            <option value="">Tanlang</option>
+            <template x-for="e in employees" :key="e.id">
+              <option :value="e.id" x-text="e.fullName"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="label">Ta'til turi *</label>
+          <select x-model="leaveForm.leaveTypeId" class="input">
+            <option value="">Tanlang</option>
+            <template x-for="t in leaveTypes" :key="t.id">
+              <option :value="t.id" x-text="t.name"></option>
+            </template>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Boshlanish *</label>
+            <input type="date" x-model="leaveForm.startDate" class="input">
+          </div>
+          <div>
+            <label class="label">Tugash *</label>
+            <input type="date" x-model="leaveForm.endDate" class="input">
+          </div>
+        </div>
+        <div>
+          <label class="label">Izoh</label>
+          <textarea x-model="leaveForm.comment" class="input" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showLeaveModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveLeave()">Yuborish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tuzatish -->
+  <div x-show="showAdjustModal" x-cloak class="modal-backdrop" @click.self="showAdjustModal = false">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title">Qo'lda tuzatish</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showAdjustModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          ⚠️ Tuzatish audit logga yoziladi va avtomatik qayta hisoblamada saqlanadi.
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Kelish</label>
+            <input type="datetime-local" x-model="adjustForm.firstIn" class="input">
+          </div>
+          <div>
+            <label class="label">Ketish</label>
+            <input type="datetime-local" x-model="adjustForm.lastOut" class="input">
+          </div>
+          <div>
+            <label class="label">Ish vaqti (daq)</label>
+            <input type="number" x-model="adjustForm.workedMinutes" class="input">
+          </div>
+          <div>
+            <label class="label">Kechikish (daq)</label>
+            <input type="number" x-model="adjustForm.lateMinutes" class="input">
+          </div>
+          <div>
+            <label class="label">Erta ketish (daq)</label>
+            <input type="number" x-model="adjustForm.earlyLeaveMinutes" class="input">
+          </div>
+          <div>
+            <label class="label">Holat</label>
+            <select x-model="adjustForm.status" class="input">
+              <template x-for="(label, key) in STATUS_LABELS" :key="key">
+                <option :value="key" x-text="label"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="label">Izoh</label>
+          <input type="text" x-model="adjustForm.note" class="input">
+        </div>
+        <div>
+          <label class="label">Sabab *</label>
+          <textarea x-model="adjustForm.reason" class="input" rows="2" placeholder="Masalan: Xodim kasal bo'lib, shifoxonaga yuborilgan"></textarea>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showAdjustModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveAdjustment()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Excel import (xodimlar) -->
+  <div x-show="importReport" x-cloak class="modal-backdrop" @click.self="importReport = null">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title">Excel import natijasi</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="importReport = null">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="rounded-lg bg-emerald-50 p-3">
+            <div class="text-2xl font-bold text-emerald-600" x-text="importReport?.created ?? 0"></div>
+            <div class="text-xs text-slate-500">Yaratildi</div>
+          </div>
+          <div class="rounded-lg bg-blue-50 p-3">
+            <div class="text-2xl font-bold text-blue-600" x-text="importReport?.updated ?? 0"></div>
+            <div class="text-xs text-slate-500">Yangilandi</div>
+          </div>
+          <div class="rounded-lg bg-red-50 p-3">
+            <div class="text-2xl font-bold text-red-600" x-text="importReport?.errors?.length ?? 0"></div>
+            <div class="text-xs text-slate-500">Xato</div>
+          </div>
+        </div>
+        <div class="text-xs text-slate-500" x-show="importReport?.file">Fayl: <span x-text="importReport?.file"></span></div>
+        <div x-show="(importReport?.errors?.length || 0) > 0" class="rounded-lg border border-red-200 bg-red-50 p-3">
+          <ul class="text-xs text-red-600 space-y-0.5 max-h-40 overflow-y-auto">
+            <template x-for="(e, i) in (importReport?.errors || [])" :key="i">
+              <li x-text="(e.row ? `Qator ${e.row}: ` : '') + e.message"></li>
+            </template>
+          </ul>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end">
+        <button class="btn-primary" @click="importReport = null">Yopish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabel Excel import -->
+  <div x-show="importReport2" x-cloak class="modal-backdrop" @click.self="importReport2 = null">
+    <div class="modal">
+      <div class="card-header">
+        <span class="card-title">Excel import natijasi</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="importReport2 = null">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="grid grid-cols-4 gap-3 text-center">
+          <div class="rounded-lg bg-emerald-50 p-3">
+            <div class="text-2xl font-bold text-emerald-600" x-text="importReport2?.applied ?? 0"></div>
+            <div class="text-xs text-slate-500">Qo'llandi</div>
+          </div>
+          <div class="rounded-lg bg-slate-100 p-3">
+            <div class="text-2xl font-bold text-slate-600" x-text="importReport2?.unchanged ?? 0"></div>
+            <div class="text-xs text-slate-500">O'zgarmagan</div>
+          </div>
+          <div class="rounded-lg bg-amber-50 p-3">
+            <div class="text-2xl font-bold text-amber-600" x-text="importReport2?.skipped ?? 0"></div>
+            <div class="text-xs text-slate-500">O'tkazildi</div>
+          </div>
+          <div class="rounded-lg bg-red-50 p-3">
+            <div class="text-2xl font-bold text-red-600" x-text="importReport2?.errors?.length ?? 0"></div>
+            <div class="text-xs text-slate-500">Xato</div>
+          </div>
+        </div>
+        <div class="text-xs text-slate-500" x-show="importReport2?.file">
+          Fayl: <span x-text="importReport2?.file"></span> ·
+          <span x-text="importReport2?.format === 'matrix' ? 'Matritsa (Tabel)' : 'Kunlik tabel'"></span>
+        </div>
+        <div x-show="(importReport2?.errors?.length || 0) > 0" class="rounded-lg border border-red-200 bg-red-50 p-3">
+          <ul class="text-xs text-red-600 space-y-0.5 max-h-40 overflow-y-auto">
+            <template x-for="(e, i) in (importReport2?.errors || [])" :key="i">
+              <li x-text="(e.row ? `Qator ${e.row}: ` : '') + e.message"></li>
+            </template>
+          </ul>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end">
+        <button class="btn-primary" @click="importReport2 = null">Yopish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bayram -->
+  <div x-show="showHolidayModal" x-cloak class="modal-backdrop" @click.self="showHolidayModal = false">
+    <div class="modal max-w-sm">
+      <div class="card-header">
+        <span class="card-title">Bayram / dam kuni</span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showHolidayModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="label">Sana *</label>
+          <input type="date" x-model="holidayForm.date" class="input">
+        </div>
+        <div>
+          <label class="label">Nomi *</label>
+          <input type="text" x-model="holidayForm.name" class="input" placeholder="Mustaqillik kuni">
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" x-model="holidayForm.isWorking" class="rounded"> Bu — ish kuni
+        </label>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showHolidayModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveHoliday()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Foydalanuvchi -->
+  <div x-show="showUserModal" x-cloak class="modal-backdrop" @click.self="showUserModal = false">
+    <div class="modal max-w-sm">
+      <div class="card-header">
+        <span class="card-title" x-text="userForm.id ? 'Foydalanuvchini tahrirlash' : 'Yangi foydalanuvchi'"></span>
+        <button class="text-slate-400 hover:text-slate-600" @click="showUserModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="label">Login *</label>
+          <input type="text" x-model="userForm.username" class="input">
+        </div>
+        <div>
+          <label class="label">F.I.O *</label>
+          <input type="text" x-model="userForm.fullName" class="input">
+        </div>
+        <div>
+          <label class="label" x-text="userForm.id ? 'Yangi parol (bo\'sh qoldirilsa o\'zgartirilmaydi)' : 'Parol *'"></label>
+          <input type="password" x-model="userForm.password" class="input">
+        </div>
+        <div>
+          <label class="label">Rol *</label>
+          <select x-model="userForm.roleId" class="input">
+            <option value="1">Super admin</option>
+            <option value="2">Administrator (adminka)</option>
+            <option value="3">Glavniy vrach</option>
+            <option value="4">Kadrlar boshlig'i</option>
+            <option value="5">Direktor</option>
+            <option value="6">Hisobchi</option>
+          </select>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+        <button class="btn-secondary" @click="showUserModal = false">Bekor qilish</button>
+        <button class="btn-primary" @click="saveUser()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Command palette -->
+  <div x-show="paletteOpen" x-cloak class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] flex items-start justify-center pt-32 px-4"
+       @click.self="paletteOpen = false">
+    <div class="w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden" @click.stop>
+      <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
+        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input type="text" x-model="paletteQuery" x-ref="paletteInput" @keydown.escape="paletteOpen = false"
+               @keydown.enter="runPaletteCommand(paletteResults[0])"
+               class="flex-1 border-0 outline-none text-sm" placeholder="Buyruq yoki bo'lim nomini yozing...">
+        <kbd class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">ESC</kbd>
+      </div>
+      <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+        <template x-for="(cmd, i) in paletteResults" :key="i">
+          <button class="w-full text-left px-4 py-2.5 hover:bg-slate-50 flex items-center justify-between" @click="runPaletteCommand(cmd)">
+            <span class="text-sm" x-text="cmd.label"></span>
+            <span class="text-xs text-slate-400" x-text="cmd.hint"></span>
+          </button>
+        </template>
+        <p x-show="paletteResults.length === 0" class="px-4 py-6 text-center text-sm text-slate-400">Hech narsa topilmadi</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- To'g'ri -->
+  <div class="fixed bottom-4 right-4 z-[60] space-y-2">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="rounded-lg shadow-lg px-4 py-3 text-sm text-white flex items-center gap-3 max-w-sm"
+           :class="t.type === 'error' ? 'bg-red-600' : t.type === 'success' ? 'bg-emerald-600' : 'bg-slate-800'"
+           x-text="t.message"></div>
+    </template>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,15 @@
+# HTTPS varianti (lokal sertifikat bilan).
+# Ishga tushirish:
+#   1) ./scripts/make-certs.sh            (serverda, openssl bilan)
+#   2) docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+services:
+  web:
+    build:
+      context: ./web
+      args:
+        NGINX_CONF: nginx.conf
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro

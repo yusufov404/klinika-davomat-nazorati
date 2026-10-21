@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.pgdata/
+*.log
+.env
+public/css/app.css
+public/vendor/
+tests/e2e/
+tests/load/
